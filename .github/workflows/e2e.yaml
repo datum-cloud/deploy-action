@@ -1,0 +1,73 @@
+name: E2E
+
+# Deploys a public test image to a Datum Cloud project with this action, checks
+# that its URL serves, and destroys it. Needs the `e2e` environment to hold a
+# DATUM_SA_CREDENTIALS secret and DATUM_PROJECT and DATUM_CITY variables.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy, verify and destroy
+    runs-on: ubuntu-latest
+    environment: e2e
+    timeout-minutes: 30
+    env:
+      WORKLOAD: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      PROJECT: ${{ vars.DATUM_PROJECT }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Deploy
+        id: deploy
+        uses: ./
+        with:
+          credentials: ${{ secrets.DATUM_SA_CREDENTIALS }}
+          project: ${{ vars.DATUM_PROJECT }}
+          workload: ${{ env.WORKLOAD }}
+          image: docker.io/traefik/whoami:v1.10.3
+          cities: ${{ vars.DATUM_CITY }}
+          http-port: '80'
+          runtime-class: general-purpose
+          env: |
+            WHOAMI_NAME=${{ env.WORKLOAD }}
+          rollout-timeout: 15m
+
+      - name: Verify the URL serves the workload
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL}" ]; then
+            echo "::error::the deploy reported no URL"
+            exit 1
+          fi
+          # DNS and the certificate for a new URL take a few minutes to settle.
+          deadline=$((SECONDS + 600))
+          until body=$(curl -fsS --max-time 10 "${URL}"); do
+            if [ "${SECONDS}" -ge "${deadline}" ]; then
+              echo "::error::${URL} did not answer within 10 minutes"
+              exit 1
+            fi
+            sleep 15
+          done
+          grep -q "Name: ${WORKLOAD}" <<<"${body}" || {
+            echo "::error::${URL} did not answer as ${WORKLOAD}"
+            exit 1
+          }
+
+      - name: Destroy
+        if: always() && steps.deploy.outcome != 'skipped'
+        run: datumctl compute destroy "${WORKLOAD}" --project "${PROJECT}" --yes
