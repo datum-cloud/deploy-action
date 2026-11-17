@@ -97,7 +97,7 @@ The action runs on Linux runners.
 | `cities` | one of three | | Comma-separated city codes, such as `DFW,IAD`. |
 | `location-selector` | one of three | | Label selector over location topology. |
 | `http-port` | | | Port the container serves HTTP on. Publishes the workload on a Datum-managed HTTPS URL. |
-| `http2` | | `false` | `true` when the container serves HTTP/2 or gRPC. |
+| `http2` | | | `true` when the container serves HTTP/2 or gRPC, `false` to switch back to HTTP/1.1. |
 | `min-instances` | | | Minimum instances per location. |
 | `max-instances` | | | Maximum instances to autoscale to; `0` disables autoscaling. |
 | `instance-type` | | `datumcloud-d1-standard-2` | Instance type. Applied on every deploy, so pass it each time to keep another type. |

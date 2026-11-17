@@ -45,9 +45,9 @@ if [ -z "${INPUT_LOCATIONS:-}${INPUT_CITIES:-}${INPUT_LOCATION_SELECTOR:-}" ]; t
   error "one of 'locations', 'cities' or 'location-selector' is required"
 fi
 
-case "${INPUT_HTTP2:-false}" in
-  true | false) ;;
-  *) error "input 'http2' must be 'true' or 'false', got '${INPUT_HTTP2}'" ;;
+case "${INPUT_HTTP2:-}" in
+  '' | true | false) ;;
+  *) error "input 'http2' must be 'true', 'false' or empty, got '${INPUT_HTTP2}'" ;;
 esac
 
 rollout_timeout="${INPUT_ROLLOUT_TIMEOUT:-15m}"
@@ -64,7 +64,7 @@ append_if_set location "${INPUT_LOCATIONS:-}"
 append_if_set city "${INPUT_CITIES:-}"
 append_if_set location-selector "${INPUT_LOCATION_SELECTOR:-}"
 append_if_set http-port "${INPUT_HTTP_PORT:-}"
-[ "${INPUT_HTTP2:-false}" = true ] && args+=(--http2)
+append_if_set http2 "${INPUT_HTTP2:-}"
 append_if_set min "${INPUT_MIN_INSTANCES:-}"
 append_if_set max "${INPUT_MAX_INSTANCES:-}"
 append_if_set instance-type "${INPUT_INSTANCE_TYPE:-}"

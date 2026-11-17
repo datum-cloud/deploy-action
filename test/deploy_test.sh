@@ -41,7 +41,6 @@ run() {
     INPUT_WORKLOAD=api \
     INPUT_IMAGE=ghcr.io/example/api:1.0.0 \
     INPUT_CITIES=DFW \
-    INPUT_HTTP2=false \
     INPUT_ROLLOUT_TIMEOUT=15m \
     "$@" \
     bash "${script}" >"${work}/log" 2>&1 || status=$?
@@ -95,7 +94,7 @@ run INPUT_HTTP_PORT=8080 INPUT_HTTP2=true INPUT_MIN_INSTANCES=2 INPUT_MAX_INSTAN
   INPUT_LOCATION_SELECTOR='topology.datum.net/region in (us-east-1)'
 assert_status 0
 assert_arg --http-port=8080
-assert_arg --http2
+assert_arg --http2=true
 assert_arg --min=2
 assert_arg --max=5
 assert_arg --instance-type=datumcloud-d1-standard-2
@@ -104,6 +103,11 @@ assert_arg --network=backend
 assert_arg --build=./api
 assert_arg --location=us-east-1,eu-west-1
 assert_arg '--location-selector=topology.datum.net/region in (us-east-1)'
+
+current="passes an explicit http2=false so HTTP/2 can be switched off"
+run INPUT_HTTP2=false
+assert_status 0
+assert_arg --http2=false
 
 current="reports an empty URL when the workload is not published"
 run STUB_MODE=no-url
@@ -134,7 +138,7 @@ done
 current="rejects a non-boolean http2"
 run INPUT_HTTP2=yes
 assert_status 1
-assert_log "input 'http2' must be 'true' or 'false'"
+assert_log "input 'http2' must be 'true', 'false' or empty"
 refute_called
 
 current="rejects a malformed rollout timeout"

@@ -51,9 +51,11 @@ inputs:
       setting.
     required: false
   http2:
-    description: Set to true when the container serves HTTP/2 or gRPC on http-port.
+    description: >-
+      Set to true when the container serves HTTP/2 or gRPC on http-port, or
+      false to switch a workload back to HTTP/1.1. Leave empty on a redeploy
+      to keep the current setting.
     required: false
-    default: 'false'
   min-instances:
     description: Minimum number of instances per location.
     required: false
