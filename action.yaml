@@ -1,0 +1,189 @@
+name: Deploy to Datum Cloud
+description: >-
+  Deploy a container workload to Datum Cloud Compute and, optionally, publish
+  it on a Datum-managed HTTPS URL.
+author: Datum Cloud
+
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  credentials:
+    description: >-
+      Datum service account credentials JSON, raw or base64-encoded. Pass it
+      from a secret; never commit it.
+    required: true
+  project:
+    description: Datum Cloud project that owns the workload.
+    required: true
+  workload:
+    description: >-
+      Name of the workload to create or update. Lowercase letters, digits
+      and '-'.
+    required: true
+  image:
+    description: >-
+      Fully qualified container image to deploy, for example
+      ghcr.io/acme/api:1.4.2. When build-context is set, the image is pushed
+      here first.
+    required: true
+  build-context:
+    description: >-
+      Directory to build and push the image from before deploying, relative to
+      working-directory. Leave empty to deploy an existing image.
+    required: false
+  locations:
+    description: Comma-separated locations to deploy to, for example us-east-1,eu-west-1.
+    required: false
+  cities:
+    description: Comma-separated city codes to deploy to, for example DFW,IAD.
+    required: false
+  location-selector:
+    description: >-
+      Label selector over location topology, for example
+      'topology.datum.net/region in (us-east-1,eu-west-1)'.
+    required: false
+  http-port:
+    description: >-
+      Port the container serves HTTP on. Setting it publishes the workload on
+      a Datum-managed HTTPS URL. Leave empty on a redeploy to keep the current
+      setting.
+    required: false
+  http2:
+    description: >-
+      Set to true when the container serves HTTP/2 or gRPC on http-port, or
+      false to switch a workload back to HTTP/1.1. Leave empty on a redeploy
+      to keep the current setting.
+    required: false
+  min-instances:
+    description: Minimum number of instances per location.
+    required: false
+  max-instances:
+    description: Maximum number of instances to autoscale up to; 0 disables autoscaling.
+    required: false
+  instance-type:
+    description: >-
+      Instance type, for example datumcloud-d1-standard-2. Left empty, the
+      workload runs on datumcloud-d1-standard-2, even on a redeploy, so pass it
+      on every deploy to keep another type.
+    required: false
+  runtime-class:
+    description: >-
+      Runtime class for a new workload, for example general-purpose. Cannot be
+      changed after the workload exists.
+    required: false
+  network:
+    description: >-
+      Network a new workload attaches to. Cannot be changed after the workload
+      exists.
+    required: false
+  env:
+    description: >-
+      Environment variables, one KEY=VALUE per line. KEY- removes one. Leading
+      and trailing spaces are trimmed and a value cannot span lines. Use
+      env-from-secrets for sensitive values.
+    required: false
+  env-from-secrets:
+    description: Secrets to import as environment variables, one NAME or NAME:PREFIX_ per line.
+    required: false
+  env-from-configmaps:
+    description: ConfigMaps to import as environment variables, one NAME or NAME:PREFIX_ per line.
+    required: false
+  secret-mounts:
+    description: Secrets to mount, one NAME:/mount/path per line.
+    required: false
+  configmap-mounts:
+    description: ConfigMaps to mount, one NAME:/mount/path per line.
+    required: false
+  labels:
+    description: >-
+      Labels for the workload and its instances, one key=value per line.
+      Changing a label replaces the workload's instances.
+    required: false
+  rollout-timeout:
+    description: >-
+      How long the deploy may take, including any build and push, as a number
+      with an optional s, m, h or d suffix, such as 10m. The step fails when it
+      is exceeded; a rollout already started continues on Datum Cloud.
+    required: false
+    default: 15m
+  working-directory:
+    description: >-
+      Directory to run the deploy from. The deploy writes workload.yaml here.
+    required: false
+    default: .
+  datumctl-version:
+    description: datumctl release tag to install.
+    required: false
+    default: v0.24.0
+  compute-plugin-version:
+    description: datumctl compute plugin release tag to install.
+    required: false
+    default: v0.16.3
+  auth-hostname:
+    description: Datum auth server hostname.
+    required: false
+    default: auth.datum.net
+
+outputs:
+  url:
+    description: >-
+      The workload's Datum-managed HTTPS URL. Empty when the workload is not
+      published on one.
+    value: ${{ steps.deploy.outputs.url }}
+  workload:
+    description: Name of the deployed workload.
+    value: ${{ steps.deploy.outputs.workload }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check runner
+      shell: bash
+      run: |
+        if [ "${RUNNER_OS}" != "Linux" ]; then
+          echo "::error::Deploy to Datum Cloud runs on Linux runners only; this runner is ${RUNNER_OS}."
+          exit 1
+        fi
+
+    - name: Set up datumctl
+      uses: datum-cloud/setup-datumctl-action@93d64fd09171e95e6516ed9d64515dfda6ae39a0 # v0.1.0
+      with:
+        version: ${{ inputs.datumctl-version }}
+        credentials: ${{ inputs.credentials }}
+        auth-hostname: ${{ inputs.auth-hostname }}
+
+    - name: Install compute plugin
+      shell: bash
+      env:
+        COMPUTE_PLUGIN_VERSION: ${{ inputs.compute-plugin-version }}
+      run: datumctl plugin install "compute@${COMPUTE_PLUGIN_VERSION}"
+
+    - name: Deploy workload
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_WORKLOAD: ${{ inputs.workload }}
+        INPUT_IMAGE: ${{ inputs.image }}
+        INPUT_BUILD_CONTEXT: ${{ inputs.build-context }}
+        INPUT_LOCATIONS: ${{ inputs.locations }}
+        INPUT_CITIES: ${{ inputs.cities }}
+        INPUT_LOCATION_SELECTOR: ${{ inputs.location-selector }}
+        INPUT_HTTP_PORT: ${{ inputs.http-port }}
+        INPUT_HTTP2: ${{ inputs.http2 }}
+        INPUT_MIN_INSTANCES: ${{ inputs.min-instances }}
+        INPUT_MAX_INSTANCES: ${{ inputs.max-instances }}
+        INPUT_INSTANCE_TYPE: ${{ inputs.instance-type }}
+        INPUT_RUNTIME_CLASS: ${{ inputs.runtime-class }}
+        INPUT_NETWORK: ${{ inputs.network }}
+        INPUT_ENV: ${{ inputs.env }}
+        INPUT_ENV_FROM_SECRETS: ${{ inputs.env-from-secrets }}
+        INPUT_ENV_FROM_CONFIGMAPS: ${{ inputs.env-from-configmaps }}
+        INPUT_SECRET_MOUNTS: ${{ inputs.secret-mounts }}
+        INPUT_CONFIGMAP_MOUNTS: ${{ inputs.configmap-mounts }}
+        INPUT_LABELS: ${{ inputs.labels }}
+        INPUT_ROLLOUT_TIMEOUT: ${{ inputs.rollout-timeout }}
+      run: '"${GITHUB_ACTION_PATH}/scripts/deploy.sh"'
