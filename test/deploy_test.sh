@@ -249,9 +249,29 @@ current="does nothing when no session was started"
 env -i PATH=/usr/bin:/bin RUNNER_TEMP="${sessroot}/runner-temp" SESSION_DIR= \
   bash "${root}/scripts/session-end.sh" || fail "failed with no session"
 
-current="leaves Docker's config alone"
-! grep -q 'DOCKER_CONFIG' "${root}/action.yaml" || fail "action sets DOCKER_CONFIG"
-! grep -q 'docker' "${root}/scripts/session-start.sh" || fail "session-start.sh handles Docker config"
+current="passes the runner's Docker config through and never touches it"
+dockerhome="${sessroot}/dockerhome"
+rm -rf "${dockerhome}" "${sessroot}/runner-temp" "${sessroot}/out"
+mkdir -p "${dockerhome}/.docker" "${sessroot}/runner-temp"
+echo '{"auths":{"registry.example":{"auth":"c2VjcmV0"}}}' >"${dockerhome}/.docker/config.json"
+before=$(cksum <"${dockerhome}/.docker/config.json")
+: >"${sessroot}/out"
+env -i PATH="${sessroot}/bin:/usr/bin:/bin" HOME="${dockerhome}" \
+  RUNNER_TEMP="${sessroot}/runner-temp" GITHUB_OUTPUT="${sessroot}/out" \
+  bash "${root}/scripts/session-start.sh"
+[ "$(sed -n 's/^docker-config=//p' "${sessroot}/out")" = "${dockerhome}/.docker" ] || fail "docker-config is not the real home's .docker"
+sdir=$(sed -n 's/^dir=//p' "${sessroot}/out")
+env -i PATH="${sessroot}/bin:/usr/bin:/bin" RUNNER_TEMP="${sessroot}/runner-temp" SESSION_DIR="${sdir}" \
+  bash "${root}/scripts/session-end.sh" >/dev/null 2>&1 || fail "session-end failed"
+[ "$(cksum <"${dockerhome}/.docker/config.json")" = "${before}" ] || fail "action changed the Docker config"
+: >"${sessroot}/out"
+env -i PATH="${sessroot}/bin:/usr/bin:/bin" HOME="${dockerhome}" DOCKER_CONFIG="${sessroot}/custom-docker" \
+  RUNNER_TEMP="${sessroot}/runner-temp" GITHUB_OUTPUT="${sessroot}/out" \
+  bash "${root}/scripts/session-start.sh"
+[ "$(sed -n 's/^docker-config=//p' "${sessroot}/out")" = "${sessroot}/custom-docker" ] || fail "an existing DOCKER_CONFIG is not honoured"
+awk '/name: Deploy workload/{f=1} /name: End session/{f=0} f&&/^ +DOCKER_CONFIG: [$][{][{] steps.session.outputs.docker-config [}][}]$/{ok=1} END{exit !ok}' "${root}/action.yaml" || fail "Deploy step does not get the passed-through DOCKER_CONFIG"
+[ "$(grep -cE '^ +DOCKER_CONFIG: [$][{][{] steps.session.outputs.docker-config [}][}]$' "${root}/action.yaml")" -eq 3 ] || fail "want DOCKER_CONFIG set on 3 steps"
+! grep -qE 'docker (login|logout)|rm .*docker' "${root}"/scripts/*.sh || fail "a script writes or removes Docker credentials"
 
 current="wires every datumctl step to the session and ends it on failure"
 action="${root}/action.yaml"

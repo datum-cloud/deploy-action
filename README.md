@@ -94,11 +94,12 @@ the session there instead, and the final step signs that session out. That
 step runs even when the deploy fails or the job is cancelled, and then
 deletes the directory.
 
-Docker is the one exception, by design. The action never runs `docker login`
-and never writes Docker credentials: datumctl only reads the registry sign-ins
-already in the runner's Docker config when it builds and pushes. The Datum
-sign-in leaves nothing there, and the registry logins your own steps add
-stay where Docker put them.
+Docker is the one exception, by design. The action writes no Docker
+credentials and never runs `docker login` or `docker logout`. It passes the
+runner's existing Docker config to datumctl, so a registry login from an
+earlier step, such as `docker/login-action`, keeps working for the build and
+push. Those logins belong to your workflow and stay on the runner as your own
+setup leaves them.
 
 A runner that is killed or loses power mid-job cannot run that step, and the
 directory stays in `RUNNER_TEMP` until the runner is cleaned. Run self-hosted

@@ -161,6 +161,7 @@ runs:
       env:
         HOME: ${{ steps.session.outputs.dir }}
         XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
 
     - name: Install compute plugin
       shell: bash
@@ -168,6 +169,7 @@ runs:
         COMPUTE_PLUGIN_VERSION: ${{ inputs.compute-plugin-version }}
         HOME: ${{ steps.session.outputs.dir }}
         XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
       run: datumctl plugin install "compute@${COMPUTE_PLUGIN_VERSION}"
 
     - name: Deploy workload
@@ -177,6 +179,7 @@ runs:
       env:
         HOME: ${{ steps.session.outputs.dir }}
         XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
         INPUT_PROJECT: ${{ inputs.project }}
         INPUT_WORKLOAD: ${{ inputs.workload }}
         INPUT_IMAGE: ${{ inputs.image }}
