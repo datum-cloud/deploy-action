@@ -30,6 +30,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check the e2e environment
+        id: config
+        env:
+          DATUM_SA_CREDENTIALS: ${{ secrets.DATUM_SA_CREDENTIALS }}
+          DATUM_PROJECT: ${{ vars.DATUM_PROJECT }}
+          DATUM_CITY: ${{ vars.DATUM_CITY }}
+        run: |
+          missing=()
+          [ -n "${DATUM_SA_CREDENTIALS}" ] || missing+=("secret DATUM_SA_CREDENTIALS")
+          [ -n "${DATUM_PROJECT}" ] || missing+=("variable DATUM_PROJECT")
+          [ -n "${DATUM_CITY}" ] || missing+=("variable DATUM_CITY")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            for name in "${missing[@]}"; do
+              echo "::error::the e2e environment has no ${name}; see CONTRIBUTING.md"
+            done
+            exit 1
+          fi
+
       - name: Deploy
         id: deploy
         uses: ./
@@ -69,5 +87,5 @@ jobs:
           }
 
       - name: Destroy
-        if: always() && steps.deploy.outcome != 'skipped'
+        if: always() && steps.config.outcome == 'success' && steps.deploy.outcome != 'skipped'
         run: datumctl compute destroy "${WORKLOAD}" --project "${PROJECT}" --yes
