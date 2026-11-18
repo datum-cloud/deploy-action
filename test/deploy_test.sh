@@ -160,6 +160,74 @@ assert_status 1
 assert_log "did not finish within 1s"
 [ ! -s "${work}/output" ] || fail "outputs written after a timed-out deploy"
 
+sessroot="${work}/session"
+mkdir -p "${sessroot}/bin" "${sessroot}/home" "${sessroot}/runner-temp"
+cat >"${sessroot}/bin/datumctl" <<'EOF2'
+#!/usr/bin/env bash
+case "$1" in
+  login)
+    mkdir -p "${HOME}/.datumctl" "${XDG_CONFIG_HOME}/datumctl/service-accounts"
+    echo '{"token":"secret"}' >"${HOME}/.datumctl/credentials.json"
+    echo '{"private_key":"secret"}' >"${XDG_CONFIG_HOME}/datumctl/service-accounts/key.json"
+    ;;
+  auth) printf 'User              Status\nsa@example.iam    Active\n' ;;
+  logout) echo "$2" >>"${STUB_LOGOUTS}" ;;
+  compute) [ "${STUB_MODE:-ok}" = fail ] && exit 3; exit 0 ;;
+esac
+EOF2
+chmod +x "${sessroot}/bin/datumctl"
+
+# session runs the start script, signs in and deploys as the action's steps
+# do, then runs the end script as the always() step does.
+session() {
+  local mode=$1 realhome="${sessroot}/home"
+  rm -rf "${realhome}" "${sessroot}/runner-temp" "${sessroot}/logouts"
+  mkdir -p "${realhome}" "${sessroot}/runner-temp"
+  : >"${sessroot}/out"
+  : >"${sessroot}/logouts"
+  env -i PATH="${sessroot}/bin:/usr/bin:/bin" HOME="${realhome}" \
+    RUNNER_TEMP="${sessroot}/runner-temp" GITHUB_OUTPUT="${sessroot}/out" \
+    bash "${root}/scripts/session-start.sh"
+  sdir=$(sed -n 's/^dir=//p' "${sessroot}/out")
+  stepenv=(env -i PATH="${sessroot}/bin:/usr/bin:/bin" HOME="${sdir}"
+    XDG_CONFIG_HOME="${sdir}/.config" STUB_MODE="${mode}" STUB_LOGOUTS="${sessroot}/logouts")
+  "${stepenv[@]}" datumctl login
+  if [ -z "$(find "${sdir}" -name '*.json' 2>/dev/null)" ]; then
+    fail "login wrote no credentials into the session directory"
+  fi
+  "${stepenv[@]}" datumctl compute deploy || true
+  env -i PATH="${sessroot}/bin:/usr/bin:/bin" RUNNER_TEMP="${sessroot}/runner-temp" \
+    SESSION_DIR="${sdir}" STUB_LOGOUTS="${sessroot}/logouts" \
+    bash "${root}/scripts/session-end.sh" || fail "session-end.sh failed"
+}
+
+for mode in ok fail; do
+  current="removes the session after a ${mode} deploy"
+  session "${mode}"
+  [ ! -e "${sdir}" ] || fail "session directory ${sdir} remains"
+  [ -z "$(ls -A "${sessroot}/runner-temp")" ] || fail "runner temp not empty"
+  [ -z "$(ls -A "${sessroot}/home")" ] || fail "real HOME was written to"
+  grep -qx 'sa@example.iam' "${sessroot}/logouts" || fail "no logout for the signed-in user"
+done
+
+current="refuses to remove a directory outside the session area"
+mkdir -p "${work}/precious"
+status=0
+env -i PATH=/usr/bin:/bin RUNNER_TEMP="${sessroot}/runner-temp" SESSION_DIR="${work}/precious" \
+  bash "${root}/scripts/session-end.sh" >/dev/null 2>&1 || status=$?
+[ "${status}" -ne 0 ] && [ -d "${work}/precious" ] || fail "removed a foreign directory"
+
+current="does nothing when no session was started"
+env -i PATH=/usr/bin:/bin RUNNER_TEMP="${sessroot}/runner-temp" SESSION_DIR= \
+  bash "${root}/scripts/session-end.sh" || fail "failed with no session"
+
+current="wires every datumctl step to the session and ends it on failure"
+action="${root}/action.yaml"
+[ "$(grep -cE '^ +HOME: [$][{][{] steps.session.outputs.dir [}][}]$' "${action}")" -eq 3 ] || fail "want HOME set on 3 steps"
+[ "$(grep -cE '^ +XDG_CONFIG_HOME: [$][{][{] steps.session.outputs.dir [}][}]/.config$' "${action}")" -eq 3 ] || fail "want XDG_CONFIG_HOME set on 3 steps"
+awk '/name: End session/{f=1} f&&/if: always\(\)/{ok=1} END{exit !ok}' "${action}" || fail "End session lacks if: always()"
+awk '/name: End session/{f=1} f&&/session-end.sh/{ok=1} END{exit !ok}' "${action}" || fail "End session does not run session-end.sh"
+
 if [ "${failures}" -gt 0 ]; then
   echo "${failures} assertion(s) failed" >&2
   exit 1

@@ -147,17 +147,29 @@ runs:
           exit 1
         fi
 
+    - name: Start session
+      id: session
+      shell: bash
+      run: '"${GITHUB_ACTION_PATH}/scripts/session-start.sh"'
+
     - name: Set up datumctl
       uses: datum-cloud/setup-datumctl-action@93d64fd09171e95e6516ed9d64515dfda6ae39a0 # v0.1.0
       with:
         version: ${{ inputs.datumctl-version }}
         credentials: ${{ inputs.credentials }}
         auth-hostname: ${{ inputs.auth-hostname }}
+      env:
+        HOME: ${{ steps.session.outputs.dir }}
+        XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
 
     - name: Install compute plugin
       shell: bash
       env:
         COMPUTE_PLUGIN_VERSION: ${{ inputs.compute-plugin-version }}
+        HOME: ${{ steps.session.outputs.dir }}
+        XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
       run: datumctl plugin install "compute@${COMPUTE_PLUGIN_VERSION}"
 
     - name: Deploy workload
@@ -165,6 +177,9 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
+        HOME: ${{ steps.session.outputs.dir }}
+        XDG_CONFIG_HOME: ${{ steps.session.outputs.dir }}/.config
+        DOCKER_CONFIG: ${{ steps.session.outputs.docker-config }}
         INPUT_PROJECT: ${{ inputs.project }}
         INPUT_WORKLOAD: ${{ inputs.workload }}
         INPUT_IMAGE: ${{ inputs.image }}
@@ -187,3 +202,10 @@ runs:
         INPUT_LABELS: ${{ inputs.labels }}
         INPUT_ROLLOUT_TIMEOUT: ${{ inputs.rollout-timeout }}
       run: '"${GITHUB_ACTION_PATH}/scripts/deploy.sh"'
+
+    - name: End session
+      if: always()
+      shell: bash
+      env:
+        SESSION_DIR: ${{ steps.session.outputs.dir }}
+      run: '"${GITHUB_ACTION_PATH}/scripts/session-end.sh"'

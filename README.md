@@ -84,6 +84,21 @@ public or deploy from a workload manifest.
 
 The action runs on Linux runners.
 
+## Self-hosted runners
+
+The action leaves nothing behind. Each run signs in with its home and config
+directories pointed at a private directory under `RUNNER_TEMP`, so the
+session, the service account key and any file-stored token never land in the
+runner user's home. If the runner has a system keyring, datumctl may store
+the session there instead, and the final step signs that session out. That
+step runs even when the deploy fails or the job is cancelled, and then
+deletes the directory.
+
+A runner that is killed or loses power mid-job cannot run that step, and the
+directory stays in `RUNNER_TEMP` until the runner is cleaned. Run self-hosted
+runners as ephemeral, one job per fresh machine or container, so that nothing
+survives a job whatever happens.
+
 ## Inputs
 
 | Input | Required | Default | Description |
