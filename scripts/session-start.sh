@@ -8,7 +8,4 @@ dir=$(mktemp -d "${RUNNER_TEMP%/}/datum-session.XXXXXX")
 chmod 700 "${dir}"
 mkdir -p "${dir}/.config"
 
-{
-  echo "dir=${dir}"
-  echo "docker-config=${DOCKER_CONFIG:-${HOME}/.docker}"
-} >>"${GITHUB_OUTPUT}"
+echo "dir=${dir}" >>"${GITHUB_OUTPUT}"

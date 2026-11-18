@@ -94,6 +94,12 @@ the session there instead, and the final step signs that session out. That
 step runs even when the deploy fails or the job is cancelled, and then
 deletes the directory.
 
+Docker is the one exception, by design. The action never runs `docker login`
+and never writes Docker credentials: datumctl only reads the registry sign-ins
+already in the runner's Docker config when it builds and pushes. The Datum
+sign-in leaves nothing there, and the registry logins your own steps add
+stay where Docker put them.
+
 A runner that is killed or loses power mid-job cannot run that step, and the
 directory stays in `RUNNER_TEMP` until the runner is cleaned. Run self-hosted
 runners as ephemeral, one job per fresh machine or container, so that nothing
@@ -159,6 +165,10 @@ For a workload this action's inputs cannot describe, such as one with several
 containers or a private registry, install and sign in with
 [setup-datumctl-action](https://github.com/datum-cloud/setup-datumctl-action)
 and run `datumctl apply -f <manifest> --project <project>`.
+
+The sign-in this action makes ends with the action. A later step that needs
+`datumctl`, such as one that cleans up or checks the workload, must sign in
+itself, for example with setup-datumctl-action and the same credentials.
 
 ## Versioning
 
