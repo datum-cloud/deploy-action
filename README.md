@@ -84,6 +84,33 @@ public or deploy from a workload manifest.
 
 The action runs on Linux runners.
 
+## Self-hosted runners
+
+Each run signs in with its home and config directories pointed at a private
+directory under `RUNNER_TEMP`, so the session, the service account key and any
+file-stored token never land in the runner user's home. A final step signs the
+session out and deletes the directory. That step runs even when the deploy
+fails or the job is cancelled.
+
+If the runner has a system keyring, datumctl may store the session token there
+instead of in the directory. The final step asks datumctl to delete it, but
+datumctl does not report a failed keyring delete, so the action cannot detect
+or warn about a token left behind. Such a token stays usable until it expires.
+The service account key datumctl needs to renew it is deleted with the
+directory. On a shared runner, prefer one without a system keyring.
+
+Docker is left alone by design. The action writes no Docker
+credentials and never runs `docker login` or `docker logout`. It passes the
+runner's existing Docker config to datumctl, so a registry login from an
+earlier step, such as `docker/login-action`, keeps working for the build and
+push. Those logins belong to your workflow and stay on the runner as your own
+setup leaves them.
+
+A runner that is killed or loses power mid-job cannot run that step, and the
+directory stays in `RUNNER_TEMP` until the runner is cleaned. Run self-hosted
+runners as ephemeral, one job per fresh machine or container, so that nothing
+survives a job whatever happens.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -144,6 +171,10 @@ For a workload this action's inputs cannot describe, such as one with several
 containers or a private registry, install and sign in with
 [setup-datumctl-action](https://github.com/datum-cloud/setup-datumctl-action)
 and run `datumctl apply -f <manifest> --project <project>`.
+
+The sign-in this action makes ends with the action. A later step that needs
+`datumctl`, such as one that cleans up or checks the workload, must sign in
+itself, for example with setup-datumctl-action and the same credentials.
 
 ## Versioning
 
