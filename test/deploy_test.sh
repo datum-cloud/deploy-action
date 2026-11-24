@@ -172,7 +172,7 @@ case "$1" in
     ;;
   auth)
     printf 'User              Status\n'
-    if [ "${STUB_KEYRING_STUCK:-0}" = 1 ] || ! grep -qx 'sa@example.iam' "${STUB_LOGOUTS}" 2>/dev/null; then
+    if ! grep -qx 'sa@example.iam' "${STUB_LOGOUTS}" 2>/dev/null; then
       printf 'sa@example.iam    Active\n'
     fi
     ;;
@@ -201,7 +201,6 @@ run_session_with_cleanup() {
   "${stepenv[@]}" datumctl compute deploy || true
   env -i PATH="${sessroot}/bin:/usr/bin:/bin" RUNNER_TEMP="${sessroot}/runner-temp" \
     SESSION_DIR="${sdir}" STUB_LOGOUTS="${sessroot}/logouts" \
-    STUB_KEYRING_STUCK="${STUB_KEYRING_STUCK:-0}" \
     bash "${root}/scripts/session-end.sh" >"${sessroot}/end.log" 2>&1 || fail "session-end.sh failed"
 }
 
@@ -213,15 +212,6 @@ for mode in ok fail; do
   [ -z "$(ls -A "${sessroot}/home")" ] || fail "real HOME was written to"
   grep -qx 'sa@example.iam' "${sessroot}/logouts" || fail "no logout for the signed-in user"
 done
-
-current="warns when the sign-in survives logout"
-STUB_KEYRING_STUCK=1 run_session_with_cleanup ok
-grep -q '^::warning::.*sa@example.iam' "${sessroot}/end.log" || fail "no warning for a surviving sign-in"
-[ ! -e "${sdir}" ] || fail "session directory remains after the warning"
-
-current="stays quiet when logout removes the sign-in"
-run_session_with_cleanup ok
-! grep -q '::warning::' "${sessroot}/end.log" || fail "warned although logout succeeded"
 
 current="refuses to remove a directory outside the session area"
 mkdir -p "${work}/precious"

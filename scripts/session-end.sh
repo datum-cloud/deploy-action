@@ -28,10 +28,6 @@ if [ -d "${dir}" ] && command -v datumctl >/dev/null 2>&1; then
   for user in ${users}; do
     HOME="${dir}" XDG_CONFIG_HOME="${dir}/.config" timeout 60s datumctl logout "${user}" >/dev/null 2>&1 || true
   done
-  remaining=$(session_users) || remaining=
-  if [ -n "${remaining}" ]; then
-    echo "::warning::the Datum Cloud sign-in could not be removed from the system keyring for: ${remaining//$'\n'/ }"
-  fi
 fi
 
 rm -rf "${dir}"

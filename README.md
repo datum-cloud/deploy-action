@@ -86,15 +86,20 @@ The action runs on Linux runners.
 
 ## Self-hosted runners
 
-The action leaves nothing behind. Each run signs in with its home and config
-directories pointed at a private directory under `RUNNER_TEMP`, so the
-session, the service account key and any file-stored token never land in the
-runner user's home. If the runner has a system keyring, datumctl may store
-the session there instead, and the final step signs that session out. That
-step runs even when the deploy fails or the job is cancelled, and then
-deletes the directory.
+Each run signs in with its home and config directories pointed at a private
+directory under `RUNNER_TEMP`, so the session, the service account key and any
+file-stored token never land in the runner user's home. A final step signs the
+session out and deletes the directory. That step runs even when the deploy
+fails or the job is cancelled.
 
-Docker is the one exception, by design. The action writes no Docker
+If the runner has a system keyring, datumctl may store the session token there
+instead of in the directory. The final step asks datumctl to delete it, but
+datumctl does not report a failed keyring delete, so the action cannot detect
+or warn about a token left behind. Such a token stays usable until it expires.
+The service account key datumctl needs to renew it is deleted with the
+directory. On a shared runner, prefer one without a system keyring.
+
+Docker is left alone by design. The action writes no Docker
 credentials and never runs `docker login` or `docker logout`. It passes the
 runner's existing Docker config to datumctl, so a registry login from an
 earlier step, such as `docker/login-action`, keeps working for the build and
